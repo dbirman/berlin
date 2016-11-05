@@ -4,7 +4,7 @@
 % data is necessary to get the effects we're interested in.
 
 % we will assume that fixations are sampled from a 2-d gaussian using
-% mvnrnd, with pdf mvnpdf. 
+% mvnrnd, with pdf mvnpdf.
 
 % note that sigma has to be diagonal, which can be passed in just as [s0
 % s1]
@@ -48,32 +48,73 @@ axis square
 
 %% For X samples from Y subjects, calculate the optimal s0/s1 values, then
 % bootstrap across subjects to determine probability of getting true effect
-samplesizes = 100;
-subjectsizes = 3;
+samplesizes = [200 400];
+subjectsizes = [5 10];
+repeats = 20;
 runcount = length(samplesizes)*length(subjectsizes);
 
-% Save the values obtained for comparisons (p-values!) 
+disppercent(-1/repeats,'LETS DO THIS');
+% Save the values obtained for comparisons (p-values!)
+data = cell(repeats,length(samplesizes),length(subjectsizes));
+for ri = 1:repeats
+    for sai = 1:length(samplesizes)
+        samples = samplesizes(sai);
+        for sui = 1:length(subjectsizes)
+            subjects = subjectsizes(sui);
+            count = (sai-1)*length(subjectsizes)+sui;
+            
+            % save data form this round
+            data{ri,sai,sui}.fit0 = zeros(subjects,2);
+            data{ri,sai,sui}.fit1 = zeros(subjects,2);
+            data{ri,sai,sui}.boot0 = zeros(subjects,2,2);
+            data{ri,sai,sui}.boot1 = zeros(subjects,2,2);
+            for si = 1:subjects
+                % get the samples
+                samples0 = mvnrnd(mu0,sigma0,samples);
+                samples1 = mvnrnd(mu1,sigma1,samples);
+                % bootstrap each distributions mean values
+                for val = 1:2
+                    data{ri,sai,sui}.boot0(si,val,:) = bootci(1000,@mean,samples0(:,val));
+                    data{ri,sai,sui}.boot1(si,val,:) = bootci(1000,@mean,samples1(:,val));
+                end
+                % fit an MVN to each set of samples
+                fit0 = fitmvn(samples0);
+                data{ri,sai,sui}.fit0(si,:) = fit0.params;
+                fit1 = fitmvn(samples1);
+                data{ri,sai,sui}.fit1(si,:) = fit1.params;
+            end
+        end
+    end
+    disppercent(ri/repeats);
+end
+disppercent(inf);
 
+%% Analysis time--reorganize to get all repeats
 for sai = 1:length(samplesizes)
     samples = samplesizes(sai);
     for sui = 1:length(subjectsizes)
         subjects = subjectsizes(sui);
-        count = (sai-1)*length(subjectsizes)+sui;
+        % collect fit0 data
+        fit0 = zeros(2,subjects,repeats);
+        fit1 = zeros(2,subjects,repeats);
         
-        %
-        boots = zeros(
-        for si = 1:subjects
-            % get the samples
-            samples0 = mvnrnd(mu0,sigma0,samples);
-            samples1 = mvnrnd(mu1,sigma1,samples);
-            % bootstrap each distributions mean values
-            for val = 1:2
-                boot_ci(1,val,:,count) = bootci(1000,@mean,samples0(:,val));
-                boot_ci(2,val,:,count) = bootci(1000,@mean,samples1(:,val));
+        for lj = 1:subjects
+            for lk = 1:repeats
+                fit0(:,lj,lk) = data{ri,sai,sui}.fit0(lj,:);
+                fit1(:,lj,lk) = data{ri,sai,sui}.fit1(lj,:);
             end
-            % fit an MVN to each set of samples
-            fit0 = fitmvn(samples0);
-            fit1 = fitmvn(samples1);
         end
+        % compute bootstraps
+        fit0_ci = zeros(2,repeats,2);
+        fit1_ci = zeros(2,repeats,2);
+        for ri = 1:repeats
+            dat = squeeze(fit0(:,:,repeats));
+            fit0_ci(1,ri,:) = bootci(500,@mean,dat(1,:));
+           	fit0_ci(2,ri,:) = bootci(500,@mean,dat(2,:));
+            dat = squeeze(fit1(:,:,repeats));
+            fit1_ci(1,ri,:) = bootci(500,@mean,dat(1,:));
+           	fit1_ci(2,ri,:) = bootci(500,@mean,dat(2,:));
+        end
+        % compute statistics
     end
 end
